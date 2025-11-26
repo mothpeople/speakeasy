@@ -6,10 +6,7 @@
     <meta name="theme-color" content="#4f46e5">
     <title>Speakeasy</title>
     
-    <!-- PWA Manifest Link -->
     <link rel="manifest" href="manifest.json">
-    
-    <!-- iOS Support -->
     <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -22,15 +19,8 @@
     </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            /* Prevent pull-to-refresh on mobile */
-            overscroll-behavior-y: contain; 
-        }
-        .pulse-ring {
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-            animation: pulse-red 2s infinite;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overscroll-behavior-y: contain; }
+        .pulse-ring { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); animation: pulse-red 2s infinite; }
         @keyframes pulse-red {
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
             70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
@@ -39,6 +29,9 @@
         #chat-container::-webkit-scrollbar { width: 6px; }
         #chat-container::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
         .dark #chat-container::-webkit-scrollbar-thumb { background-color: #4b5563; }
+        
+        /* New style for the live preview text */
+        .preview-text { font-style: italic; opacity: 0.7; }
     </style>
 </head>
 <body class="flex flex-col h-screen max-h-screen overflow-hidden bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
@@ -67,9 +60,14 @@
     </div>
 
     <!-- Chat/Display Area -->
-    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-6">
-        <div class="flex justify-center opacity-50 pt-10">
+    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-6 relative">
+        <div class="flex justify-center opacity-50 pt-10" id="welcome-msg">
             <p class="text-sm text-gray-400 dark:text-gray-500">Tap microphone to speak</p>
+        </div>
+        
+        <!-- Live Preview Overlay (Floating at bottom of chat) -->
+        <div id="live-preview" class="hidden mx-auto bg-black/75 text-white px-4 py-2 rounded-lg text-center text-sm absolute bottom-4 left-4 right-4 backdrop-blur-sm z-20">
+            ...
         </div>
     </div>
 
@@ -82,33 +80,35 @@
         <p class="text-gray-400 dark:text-gray-500 text-xs mt-3">Hold to speak • Release to show</p>
     </div>
 
-    <textarea id="copy-helper" class="hidden"></textarea>
-
     <script>
         // --- PWA Registration ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('Service Worker registered'))
-                    .catch(err => console.log('Service Worker failed', err));
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW failed', err));
             });
         }
 
-        // --- App Logic ---
+        // --- Configuration ---
         const LANG_CONFIG = {
             'en': { code: 'en-US', name: 'English', translateCode: 'en', voiceCode: 'en-US' },
             'vi': { code: 'vi-VN', name: 'Vietnamese', translateCode: 'vi', voiceCode: 'vi-VN' }
         };
+
+        // State
         let currentSource = 'en', currentTarget = 'vi', isRecording = false;
 
+        // --- Elements ---
         const micBtn = document.getElementById('mic-btn');
         const statusText = document.getElementById('status-text');
         const chatContainer = document.getElementById('chat-container');
+        const livePreview = document.getElementById('live-preview'); // New Element
+        const welcomeMsg = document.getElementById('welcome-msg');
         const swapBtn = document.getElementById('swap-lang-btn');
         const themeBtn = document.getElementById('theme-toggle');
         const labelSource = document.getElementById('lang-label-source');
         const labelTarget = document.getElementById('lang-label-target');
 
+        // --- Speech Recognition ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition;
 
@@ -117,15 +117,18 @@
                 if (recognition) recognition.abort();
                 recognition = new SpeechRecognition();
                 recognition.lang = LANG_CONFIG[currentSource].code;
-                recognition.interimResults = false;
+                
+                // IMPORTANT: Enable interim results to show text AS you speak
+                recognition.interimResults = true; 
                 recognition.maxAlternatives = 1;
                 setupRecognitionEvents();
             } else {
-                alert("Browser not supported. Please use Chrome on Android or Desktop.");
+                alert("Browser not supported. Please use Chrome.");
             }
         }
         initRecognition();
 
+        // --- Events ---
         micBtn.addEventListener('mousedown', startRecording);
         micBtn.addEventListener('mouseup', stopRecording);
         micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
@@ -148,25 +151,58 @@
 
         function startRecording() {
             if (!recognition || isRecording) return;
-            try { recognition.start(); isRecording = true; updateUIState('listening'); } catch (e) { console.error(e); }
+            try { 
+                recognition.start(); 
+                isRecording = true; 
+                updateUIState('listening'); 
+                if(welcomeMsg) welcomeMsg.style.display = 'none';
+            } catch (e) { console.error(e); }
         }
 
         function stopRecording() {
             if (!recognition || !isRecording) return;
-            try { recognition.stop(); isRecording = false; updateUIState('processing'); } catch (e) { console.error(e); }
+            try { 
+                recognition.stop(); 
+                isRecording = false; 
+                // Don't update UI immediately to processing, allow onresult to fire final
+            } catch (e) { console.error(e); }
         }
 
         function setupRecognitionEvents() {
             recognition.onresult = async (event) => {
-                const inputText = event.results[0][0].transcript;
-                addMessage('user', inputText);
-                const translatedText = await translateText(inputText);
-                if (translatedText) {
-                    addMessage('bot', translatedText);
-                    speakText(translatedText);
+                let finalTranscript = '';
+                let interimTranscript = '';
+
+                // Loop through results to separate final from interim
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
                 }
-                updateUIState('idle');
+
+                // Show Interim (Live) text
+                if (interimTranscript) {
+                    livePreview.textContent = interimTranscript;
+                    livePreview.classList.remove('hidden');
+                } else {
+                    livePreview.classList.add('hidden');
+                }
+
+                // Process Final text
+                if (finalTranscript) {
+                    updateUIState('processing');
+                    addMessage('user', finalTranscript);
+                    const translatedText = await translateText(finalTranscript);
+                    if (translatedText) {
+                        addMessage('bot', translatedText);
+                        speakText(translatedText);
+                    }
+                    updateUIState('idle');
+                }
             };
+
             recognition.onerror = () => { statusText.textContent = "Error: Try closer to mic"; updateUIState('idle'); };
             recognition.onend = () => { if(isRecording) { isRecording = false; updateUIState('idle'); } };
         }
@@ -216,6 +252,7 @@
                 statusText.textContent = `Listening (${LANG_CONFIG[currentSource].name})...`;
                 statusText.className = "text-red-500 text-lg font-bold mb-3 h-5";
             } else if (state === 'processing') {
+                livePreview.classList.add('hidden'); // Hide preview when processing
                 micBtn.className = "w-20 h-20 rounded-full bg-indigo-300 dark:bg-indigo-700 text-white text-3xl flex items-center justify-center shadow-none";
                 micBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 statusText.textContent = "Translating...";

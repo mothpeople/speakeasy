@@ -30,7 +30,7 @@
         #chat-container::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
         .dark #chat-container::-webkit-scrollbar-thumb { background-color: #4b5563; }
         
-        /* New style for the live preview text */
+        /* Live preview text style */
         .preview-text { font-style: italic; opacity: 0.7; }
     </style>
 </head>
@@ -40,18 +40,22 @@
     <div class="bg-white dark:bg-gray-800 shadow-sm p-4 z-10 flex justify-between items-center shrink-0 transition-colors duration-200 safe-top">
         <div class="flex items-center gap-3">
             <h1 class="text-lg font-bold text-gray-800 dark:text-white">Speakeasy</h1>
-            <button id="swap-lang-btn" class="flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors">
-                <span id="lang-label-source">English</span>
+            <!-- Language Switcher (Updated to EN/VN) -->
+            <button id="swap-lang-btn" class="flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors">
+                <span id="lang-label-source">EN</span>
                 <i class="fas fa-arrow-right text-gray-400"></i>
-                <span id="lang-label-target">Vietnamese</span>
-                <i class="fas fa-sync-alt ml-1"></i>
+                <span id="lang-label-target">VN</span>
+                <i class="fas fa-sync-alt ml-1 opacity-50"></i>
             </button>
         </div>
         
         <div class="flex items-center gap-2">
-            <a href="http://paypal.me/sivarajpragasm" target="_blank" title="Donate" class="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
-                <i class="fab fa-paypal"></i>
+            <!-- Donate Button (Updated from Icon) -->
+            <a href="http://paypal.me/sivarajpragasm" target="_blank" class="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
+                Donate
             </a>
+
+            <!-- Dark Mode Toggle -->
             <button id="theme-toggle" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-yellow-300 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                 <i class="fas fa-moon dark:hidden"></i>
                 <i class="fas fa-sun hidden dark:inline"></i>
@@ -65,7 +69,7 @@
             <p class="text-sm text-gray-400 dark:text-gray-500">Tap microphone to speak</p>
         </div>
         
-        <!-- Live Preview Overlay (Floating at bottom of chat) -->
+        <!-- Live Preview Overlay -->
         <div id="live-preview" class="hidden mx-auto bg-black/75 text-white px-4 py-2 rounded-lg text-center text-sm absolute bottom-4 left-4 right-4 backdrop-blur-sm z-20">
             ...
         </div>
@@ -88,10 +92,10 @@
             });
         }
 
-        // --- Configuration ---
+        // --- Configuration (Updated Names to EN/VN) ---
         const LANG_CONFIG = {
-            'en': { code: 'en-US', name: 'English', translateCode: 'en', voiceCode: 'en-US' },
-            'vi': { code: 'vi-VN', name: 'Vietnamese', translateCode: 'vi', voiceCode: 'vi-VN' }
+            'en': { code: 'en-US', name: 'EN', translateCode: 'en', voiceCode: 'en-US' },
+            'vi': { code: 'vi-VN', name: 'VN', translateCode: 'vi', voiceCode: 'vi-VN' }
         };
 
         // State
@@ -101,7 +105,7 @@
         const micBtn = document.getElementById('mic-btn');
         const statusText = document.getElementById('status-text');
         const chatContainer = document.getElementById('chat-container');
-        const livePreview = document.getElementById('live-preview'); // New Element
+        const livePreview = document.getElementById('live-preview');
         const welcomeMsg = document.getElementById('welcome-msg');
         const swapBtn = document.getElementById('swap-lang-btn');
         const themeBtn = document.getElementById('theme-toggle');
@@ -117,8 +121,6 @@
                 if (recognition) recognition.abort();
                 recognition = new SpeechRecognition();
                 recognition.lang = LANG_CONFIG[currentSource].code;
-                
-                // IMPORTANT: Enable interim results to show text AS you speak
                 recognition.interimResults = true; 
                 recognition.maxAlternatives = 1;
                 setupRecognitionEvents();
@@ -164,7 +166,6 @@
             try { 
                 recognition.stop(); 
                 isRecording = false; 
-                // Don't update UI immediately to processing, allow onresult to fire final
             } catch (e) { console.error(e); }
         }
 
@@ -173,7 +174,6 @@
                 let finalTranscript = '';
                 let interimTranscript = '';
 
-                // Loop through results to separate final from interim
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     if (event.results[i].isFinal) {
                         finalTranscript += event.results[i][0].transcript;
@@ -182,7 +182,6 @@
                     }
                 }
 
-                // Show Interim (Live) text
                 if (interimTranscript) {
                     livePreview.textContent = interimTranscript;
                     livePreview.classList.remove('hidden');
@@ -190,7 +189,6 @@
                     livePreview.classList.add('hidden');
                 }
 
-                // Process Final text
                 if (finalTranscript) {
                     updateUIState('processing');
                     addMessage('user', finalTranscript);
@@ -252,7 +250,7 @@
                 statusText.textContent = `Listening (${LANG_CONFIG[currentSource].name})...`;
                 statusText.className = "text-red-500 text-lg font-bold mb-3 h-5";
             } else if (state === 'processing') {
-                livePreview.classList.add('hidden'); // Hide preview when processing
+                livePreview.classList.add('hidden');
                 micBtn.className = "w-20 h-20 rounded-full bg-indigo-300 dark:bg-indigo-700 text-white text-3xl flex items-center justify-center shadow-none";
                 micBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 statusText.textContent = "Translating...";

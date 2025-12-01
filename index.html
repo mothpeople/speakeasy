@@ -85,7 +85,6 @@
         // --- INTERNAL DICTIONARY (INSTANT MODE) ---
         const LOCAL_PHRASEBOOK = {
             'en': {
-                'hi': 'Xin chào',
                 'hello': 'Xin chào',
                 'how are you': 'Bạn khỏe không',
                 'im fine': 'Tôi khỏe',
@@ -183,12 +182,18 @@
         }
 
         function checkLocalDictionary(text, sourceLang) {
-            // Remove punctuation and lowercase for matching
             const key = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").trim();
             if (LOCAL_PHRASEBOOK[sourceLang] && LOCAL_PHRASEBOOK[sourceLang][key]) {
                 return LOCAL_PHRASEBOOK[sourceLang][key];
             }
             return null;
+        }
+
+        // --- NORMALIZATION FUNCTION ---
+        function normalizeInput(text) {
+            const clean = text.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+            if (clean === 'hi') return 'Hello';
+            return text;
         }
 
         function setupRecognitionEvents() {
@@ -210,15 +215,18 @@
 
                 if (finalTranscript) {
                     updateUIState('processing');
-                    const formattedInput = formatSentence(finalTranscript, currentSource);
+                    
+                    // 1. Normalize Input (Hi -> Hello)
+                    const normalizedText = normalizeInput(finalTranscript);
+                    
+                    // 2. Format Input
+                    const formattedInput = formatSentence(normalizedText, currentSource);
                     addMessage('user', formattedInput);
                     
-                    // 1. Check Local Dictionary FIRST
-                    let translatedText = checkLocalDictionary(finalTranscript, currentSource);
+                    let translatedText = checkLocalDictionary(normalizedText, currentSource);
                     
-                    // 2. If not found locally, call API
                     if (!translatedText) {
-                        translatedText = await translateText(finalTranscript);
+                        translatedText = await translateText(normalizedText);
                     }
 
                     if (translatedText) {
@@ -244,7 +252,6 @@
                 const response = await fetch(url);
                 const data = await response.json();
                 
-                // Double check for ETS error even if status is 200
                 if (data.responseData.translatedText.includes("ETS TEST")) {
                     return "Server busy (Try again in 1 min)";
                 }

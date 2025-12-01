@@ -13,9 +13,7 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-        }
+        tailwind.config = { darkMode: 'class' }
     </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -29,7 +27,6 @@
         #chat-container::-webkit-scrollbar { width: 6px; }
         #chat-container::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
         .dark #chat-container::-webkit-scrollbar-thumb { background-color: #4b5563; }
-        .preview-text { font-style: italic; opacity: 0.7; }
     </style>
 </head>
 <body class="flex flex-col h-screen max-h-screen overflow-hidden bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
@@ -47,9 +44,7 @@
         </div>
         
         <div class="flex items-center gap-2">
-            <a href="http://paypal.me/sivarajpragasm" target="_blank" class="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
-                Donate
-            </a>
+            <a href="http://paypal.me/sivarajpragasm" target="_blank" class="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">Donate</a>
             <button id="theme-toggle" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-yellow-300 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                 <i class="fas fa-moon dark:hidden"></i>
                 <i class="fas fa-sun hidden dark:inline"></i>
@@ -86,6 +81,31 @@
 
         const QUESTION_STARTERS_EN = ['who', 'what', 'where', 'when', 'why', 'how', 'do', 'does', 'did', 'is', 'are', 'was', 'were', 'can', 'could', 'would', 'will', 'should', 'may'];
         const QUESTION_STARTERS_VN = ['ai', 'cái gì', 'ở đâu', 'khi nào', 'tại sao', 'làm sao', 'như thế nào', 'có phải', 'vì sao'];
+
+        // --- INTERNAL DICTIONARY (INSTANT MODE) ---
+        const LOCAL_PHRASEBOOK = {
+            'en': {
+                'hi': 'Xin chào',
+                'hello': 'Xin chào',
+                'how are you': 'Bạn khỏe không',
+                'im fine': 'Tôi khỏe',
+                'i am fine': 'Tôi khỏe',
+                'thank you': 'Cảm ơn',
+                'thanks': 'Cảm ơn',
+                'bye': 'Tạm biệt',
+                'goodbye': 'Tạm biệt',
+                'good morning': 'Chào buổi sáng',
+                'good night': 'Chúc ngủ ngon'
+            },
+            'vi': {
+                'xin chào': 'Hello',
+                'bạn khỏe không': 'How are you',
+                'cảm ơn': 'Thank you',
+                'tạm biệt': 'Goodbye',
+                'chào buổi sáng': 'Good morning',
+                'chúc ngủ ngon': 'Good night'
+            }
+        };
 
         let currentSource = 'en', currentTarget = 'vi', isRecording = false;
 
@@ -150,41 +170,57 @@
             if (!text) return text;
             text = text.trim();
             text = text.charAt(0).toUpperCase() + text.slice(1);
-            const lastChar = text.charAt(text.length - 1);
-            if (['.', '?', '!', ',', ';'].includes(lastChar)) {
-                return text;
-            }
+            if (['.', '?', '!', ',', ';'].includes(text.charAt(text.length - 1))) return text;
+            
             const firstWord = text.split(' ')[0].toLowerCase();
             const starters = lang === 'en' ? QUESTION_STARTERS_EN : QUESTION_STARTERS_VN;
             const lastWord = text.split(' ').pop().toLowerCase();
             const vnEndings = ['không', 'chưa', 'nhỉ', 'hả'];
+            
             let isQuestion = starters.includes(firstWord);
             if (lang === 'vi' && vnEndings.includes(lastWord)) isQuestion = true;
             return text + (isQuestion ? '?' : '.');
+        }
+
+        function checkLocalDictionary(text, sourceLang) {
+            // Remove punctuation and lowercase for matching
+            const key = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").trim();
+            if (LOCAL_PHRASEBOOK[sourceLang] && LOCAL_PHRASEBOOK[sourceLang][key]) {
+                return LOCAL_PHRASEBOOK[sourceLang][key];
+            }
+            return null;
         }
 
         function setupRecognitionEvents() {
             recognition.onresult = async (event) => {
                 let finalTranscript = '';
                 let interimTranscript = '';
+
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
+                    if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+                    else interimTranscript += event.results[i][0].transcript;
                 }
+
                 if (interimTranscript) {
                     livePreview.textContent = interimTranscript;
                     livePreview.classList.remove('hidden');
                 } else {
                     livePreview.classList.add('hidden');
                 }
+
                 if (finalTranscript) {
                     updateUIState('processing');
                     const formattedInput = formatSentence(finalTranscript, currentSource);
                     addMessage('user', formattedInput);
-                    const translatedText = await translateText(finalTranscript);
+                    
+                    // 1. Check Local Dictionary FIRST
+                    let translatedText = checkLocalDictionary(finalTranscript, currentSource);
+                    
+                    // 2. If not found locally, call API
+                    if (!translatedText) {
+                        translatedText = await translateText(finalTranscript);
+                    }
+
                     if (translatedText) {
                         const formattedOutput = formatSentence(translatedText, currentTarget);
                         addMessage('bot', formattedOutput);
@@ -200,25 +236,20 @@
         async function translateText(text) {
             statusText.textContent = "Translating...";
             const pair = `${LANG_CONFIG[currentSource].translateCode}|${LANG_CONFIG[currentTarget].translateCode}`;
-            
-            // Generate a random ID to act as a pseudo-user to avoid strict blocking
             const randomID = Math.floor(Math.random() * 1000000);
-            
-            // IMPORTANT: Adding an email (even a placeholder) increases daily limit to 50,000 chars
             const email = 'speakeasy_user_' + randomID + '@gmail.com'; 
             
             try {
                 const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}&de=${email}`;
                 const response = await fetch(url);
                 const data = await response.json();
-
-                // Handle the "ETS TEST" error specifically
+                
+                // Double check for ETS error even if status is 200
                 if (data.responseData.translatedText.includes("ETS TEST")) {
-                    return "Daily Limit Reached (Try again tomorrow)";
+                    return "Server busy (Try again in 1 min)";
                 }
-
                 return data.responseData.translatedText;
-            } catch (error) { return "Translation Error"; }
+            } catch (error) { return "Connection Error"; }
         }
 
         function speakText(text) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'speakeasy-v3'; // You can bump this to v4 to force a refresh
+const CACHE_NAME = 'speakeasy-v4'; // Updated to v4
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
